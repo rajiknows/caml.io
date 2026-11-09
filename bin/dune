@@ -1,0 +1,4 @@
+(executable
+ (public_name caml-server)
+ (name main)
+ (libraries caml_server unix))
