@@ -11,6 +11,9 @@ or on a different machine.
 - The learner knows **Rust** — explain OCaml by analogy where useful
   (variants ≈ enums, `match` ≈ `match`, `unit` ≈ `()`).
 - Milestone-driven: each step introduces only the OCaml concepts needed.
+- **Installed OCaml: 5.4.1.** Always verify APIs against this version before
+  teaching them — e.g. `Sys.set_signal` exists, `Unix.set_signal` does not.
+  Check with a small compile test when unsure.
 
 ## Current state
 
