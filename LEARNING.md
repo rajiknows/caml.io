@@ -19,12 +19,15 @@ or on a different machine.
 
 The server in `bin/main.ml` currently:
 
-- Creates an IPv4 TCP socket, binds to `0.0.0.0:3000`, listens (backlog 1024).
-- Loops forever: accepts a client, builds a fixed `HTTP/1.1 200 OK` response,
-  writes it fully, closes the client socket.
-- Ignores the request entirely — no reading or parsing yet.
-- Handles one client at a time (a client that connects and sends nothing
-  blocks everyone).
+- Creates an IPv4 TCP socket, binds to `127.0.0.1:3000`, listens (backlog 1024).
+- Accept loop `fork`s a child per connection — concurrent clients work.
+- `Sys.set_signal Sys.sigchld Sys.Signal_ignore` reaps children (OCaml 5:
+  it's in `Sys`, not `Unix`).
+- Children read up to 4096 bytes with `Unix.read` into a `Bytes` buffer.
+- `parse_request` extracts the path and returns `string option`
+  (`Some path` / `None`).
+- `handle_client` matches the path: `/` → 200 `hello!`, other paths → 404,
+  malformed → 400. Builds response via a `(code, reason, body)` tuple.
 
 ## Concepts already taught
 
@@ -52,20 +55,20 @@ The server in `bin/main.ml` currently:
   `write_all` recursion handles partial writes
 - `Unix.close` — sockets need explicit cleanup (no `Drop`)
 
-## Known bug
+## Concepts added since this doc was written
 
-`write_all` still requests `String.length content` instead of
-`String.length content - offset`. Harmless at offset 0 with a tiny response,
-but must be fixed.
+- `match` on list patterns (`x :: rest`, literals, `_` wildcard)
+- `string option` — `Some` / `None`, nested matches unwrap it
+- `Unix.fork ()` — returns `0` in child, child pid in parent; child must
+  `exit 0`, parent closes the accepted socket
+- `Unix.read fd bytes off len`, `Bytes.create`, `Bytes.sub_string`
+- `if … then begin …; … end else …` — multi-statement branches need begin/end
+- `Sys.set_signal Sys.sigchld Sys.Signal_ignore` — zombie reaping
 
 ## Next milestones (in order)
 
-1. **Read the request** — `Unix.read` into a `Bytes` buffer; learn `Bytes` vs
-   `string`, buffers, partial reads.
-2. **Parse the request line** — split on `\r\n`, then on spaces; learn
-   `String.split_on_char` / `String.index` / pattern matching on lists.
-3. **Routing with `match`** — respond `200` for known paths, `404` otherwise.
-   This is where pattern matching gets interesting (like Rust's `match`).
-4. **Response with a body** — add `Content-Length` computed from the body.
-5. **Later:** concurrency (fork/thread per client), header parsing, request
-   bodies, error handling with exceptions.
+1. **Method-aware routing** (in progress) — `parse_request` should return
+   `(method * path)` so the router can distinguish `GET /` from `POST /`.
+2. **Dynamic paths** — `/hello/<name>`; split path on `/`, match segments.
+3. **Later:** header parsing, request bodies, exceptions for cleanup
+   (`try … with` / `Fun.protect`), replacing `fork` with `Domain` threads.
