@@ -37,7 +37,7 @@ let rec write_all (socket: Unix.file_descr) (content: string) (offset: int) =
     if bytes_written = 0 then failwith "retry"
     else write_all socket content (offset + bytes_written)
 
-let parse_request (req_text: string) : string option =
+let parse_request (req_text: string) : (string * string)  option =
     let lines = String.split_on_char '\r' req_text in
     let req_line: string option = match lines with
         | [] -> None
@@ -47,8 +47,8 @@ let parse_request (req_text: string) : string option =
     | None -> None
     | Some line ->
         match String.split_on_char ' ' line with
-        | _ :: path :: version :: [] -> Some path
-        | _ :: path :: [] -> Some path
+        | m :: path :: version :: [] -> Some (m,path)
+        | m :: path :: [] -> Some (m,path)
         | _ ->None
 
 
@@ -56,11 +56,13 @@ let handle_client (new_socket_handle: Unix.file_descr) : unit =
     let buffer = Bytes.create 4096 in
     let n  = Unix.read new_socket_handle buffer 0 4096 in
     let req_text = Bytes.sub_string buffer 0 n in
-    let path = parse_request req_text in
+    let method_and_path = parse_request req_text in
     let (code, reason , body) =
-        match path with
-            | Some "/" -> (200, "Ok", "hello!")
-            | Some _ ->   (404, "Not Found", "not valid path")
+        match method_and_path with
+            | Some ("GET", "/") -> (200, "Ok", "hello from get")
+            | Some ("POST", "/") ->   (200, "OK", "hello from post")
+            | Some ("GET", _) ->   (404, "Not Found", "")
+            | Some _ -> (405, "Method Not Allowed", "")
             | None -> (400, "Bad Request", "not valid path")
     in
     let response_text = response code reason body in
