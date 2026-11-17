@@ -18,12 +18,15 @@ let () = Unix.listen socket_handle 1024
 let protol_code = "HTTP/1.1"
 let crlf = "\r\n"
 
-let response (status_code: int) (reason: string) (headers: string list) =
+let response (status_code: int) (reason: string) (body : string) =
     let status_line =
         protol_code ^ " " ^ string_of_int status_code ^ " " ^ reason
     in
+    let headers =
+        [ "Content-Length: " ^ string_of_int (String.length body)
+            ; "Connection: close" ] in
     let lines = status_line :: headers in
-    String.concat crlf lines ^ crlf ^ crlf
+    String.concat crlf lines ^ crlf ^ crlf ^ body
 
 let rec write_all (socket: Unix.file_descr) (content: string) (offset: int) =
     if offset = (String.length content) then ()
@@ -34,34 +37,33 @@ let rec write_all (socket: Unix.file_descr) (content: string) (offset: int) =
     if bytes_written = 0 then failwith "retry"
     else write_all socket content (offset + bytes_written)
 
-let parse_request (req_text: string) : string =
+let parse_request (req_text: string) : string option =
     let lines = String.split_on_char '\r' req_text in
-    let req_line = match lines with
-        | [] -> "nothing"
-        | x :: rest -> x in
+    let req_line: string option = match lines with
+        | [] -> None
+        | x :: rest -> Some x in
 
-    let parts =  match String.split_on_char ' ' req_line with
-        | [] -> "error"
-        | _ :: path :: version :: [] -> path
-        | _ :: path :: [] -> path
-        | _ -> "fallback" in
-
-    let () = print_string parts in
-     parts
-
+    match req_line with
+    | None -> None
+    | Some line ->
+        match String.split_on_char ' ' line with
+        | _ :: path :: version :: [] -> Some path
+        | _ :: path :: [] -> Some path
+        | _ ->None
 
 
 let handle_client (new_socket_handle: Unix.file_descr) : unit =
     let buffer = Bytes.create 4096 in
     let n  = Unix.read new_socket_handle buffer 0 4096 in
     let req_text = Bytes.sub_string buffer 0 n in
-    let _path =  parse_request req_text in
-
-
-
-    let response_text =
-        response 200 "OK" ["Content-Length: 0"; "Connection: close"]
+    let path = parse_request req_text in
+    let (code, reason , body) =
+        match path with
+            | Some "/" -> (200, "Ok", "hello!")
+            | Some _ ->   (404, "Not Found", "not valid path")
+            | None -> (400, "Bad Request", "not valid path")
     in
+    let response_text = response code reason body in
     write_all new_socket_handle response_text 0;
     Unix.close new_socket_handle
 
